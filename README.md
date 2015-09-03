@@ -1,5 +1,5 @@
 # Hospitable
-Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience of using a shared file system
+Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience of using a shared file system and a friendly parallel scheduler (we're aiming for [GNU parallel](https://www.gnu.org/software/parallel/) in the long term here folks)
 
 ###Scripts
 
