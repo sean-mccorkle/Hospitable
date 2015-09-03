@@ -134,7 +134,7 @@ sub  write_remote_driver
 
 #
 # make a temporary subdirectory and go through the list of export pairs,
-# making symbolic links and a directory structure that will be recrated on the 
+# making symbolic links and a directory structure that will be recreated on the 
 # remote (execute) node
 #
 sub  prep_exports
@@ -206,8 +206,8 @@ sub  prep_link
 
 
 #
-# this changes any leading ~ to full the users home directory path and
-# then performs a glob operation, return a list of files
+# this changes any leading ~ to the fully specified users home directory path,
+# then performs a glob operation, returning a list of filenames
 #
 sub  prep_glob
    {
