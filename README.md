@@ -3,6 +3,6 @@ Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience 
 
 ###Scripts
 
-**`b1`**
+**`b1`**  Bowtie2 test case
 
-This is a developmental test script (perl) to try to get multiple bowtie2 jobs running as seperate processes with a minimum of fuss.  Given tuples of input files, this will make entries into a single Condor submit file, and create numbered subdirectories for back-and-forth transfer.
+This is a developmental test script (perl) to try to get multiple [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml) jobs running as seperate processes with a minimum of fuss.  Given tuples of input files, this will make entries into a single Condor submit file, and create numbered subdirectories for back-and-forth transfer.
