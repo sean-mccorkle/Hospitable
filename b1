@@ -79,6 +79,9 @@ print basename( $0 ), " ends.\n";
                                 # Subroutines #
                                 ###############
 
+#
+# Write the common preamble part of the Condor submit file
+#
 sub  write_submit_preamble
    {
     print SUBMIT "# submit file created by $0 ", `date`, "\n";
@@ -100,6 +103,11 @@ sub  write_submit_preamble
     print SUBMIT "\n";
    }
 
+#
+# Create the remote driver, the script that will be run on the remote
+# (execute) node, which will unpack the environment tarball and run the
+# actual executable program
+#
 
 sub  write_remote_driver
    {
@@ -124,17 +132,34 @@ sub  write_remote_driver
     system( "chmod a+rx $remote_driver_file" );
    }
 
+#
+# make a temporary subdirectory and go through the list of export pairs,
+# making symbolic links and a directory structure that will be recrated on the 
+# remote (execute) node
+#
 sub  prep_exports
    {
     my $tempdir = "tmpb1dir$$";
+
     mkdir( $tempdir ) || die "Can't mkdir $tempdir: $!\n";
     foreach my $p ( @_ )
        {
         prep_link( $tempdir, @{$p} );
        }
+
+    # make the tarball for transfer.   'h' option follows the symlinks
+
+    chdir( $tempdir );
+    system( "tar hzcvf ../$prep_tarball ." );
+    chdir( ".." );
    }
 
 
+#
+# handle the linking for one export pair.  A bit complicated because
+# this handles globbing of multiple files and interprets ~ differently
+# for the source and the target.
+#
 sub  prep_link
    {
     my $tempdir = shift;
@@ -163,6 +188,9 @@ sub  prep_link
 
     mkpath( $to_path ) unless ( -d $to_path );
 
+    # create the symlink in the temporary directory.  Handle single
+    # and multiple sources separately.
+
     if ( @from == 1 )
        {
         my $bf = basename( $from[0] );
@@ -174,13 +202,13 @@ sub  prep_link
         foreach my $f ( @from )
            { symlink( $f, "$to/" . basename($f) ); }
        }
-    chdir( $tempdir );
-    system( "tar hzcvf ../$prep_tarball ." );
-    chdir( ".." );
    }
 
 
-
+#
+# this changes any leading ~ to full the users home directory path and
+# then performs a glob operation, return a list of files
+#
 sub  prep_glob
    {
     my $s = shift;
