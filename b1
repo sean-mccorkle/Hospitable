@@ -1,14 +1,22 @@
 #!/usr/bin/env perl
 #
 # Options:   -E skip prep_export step (if done already)
-#            -s<file>  condor submit filename (defaults to b1.condor)
-#            -d<file>  remove drive script name (defaults to b1_remote_driver)
+#            -s<file>  condor submit filename (default b1.condor)
+#            -d<file>  remove drive script name (defaults b1_remote_driver)
 #
-#  This creates on the head node
+#  On the head node, in the current working directory, this creates
+#  (but does not run or submit)
+#
 #    1) a tarball of prep files (in the current working directory)
-#    2) a remote driver file
-#    3) a condor submit file
+#    2) a condor submit file
+#    3) a remote driver file, which is the executable on the remote node.
+#        This is a script which unpacks the prep file tarball, and then
+#        executes the 
+#    4) a subdirectory for each tuple of command line argument values
+#        fed to stdin.  This initially contains a file of user argument
+#       values, and symbolic links for any arguments which are files
 #
+
 use strict;
 
 use File::Basename;
@@ -16,21 +24,22 @@ use File::Path;
 our( $opt_E, $opt_s, $opt_d );  
 use Getopt::Std;
 
-
 getopts( "Ed:s:" ) || die "Bad option, only -E recognized\n";
 
 my $remote_driver_file = $opt_d ? $opt_d : "b1_remote_driver";
-my $submit_file = $opt_s ? $opt_s : "b1.condor";
-my $condor_logfile = "b1.condor.log";
+my $submit_file        = $opt_s ? $opt_s : "b1.condor";
+my $condor_logfile     = "b1.condor.log";
 my $condor_output_file = "b1.condor.outfile.txt";
-my $condor_error_file = "b1.condor.error.txt";
+my $condor_error_file  = "b1.condor.error.txt";
+my $subdir_pref        = "b1.Subdir";
+my $user_args_file     = "b1.user_args.env";
 
-my $prep_tarball = "prep_xfer.tar.gz";
-
+my $prep_tarball       = "prep_xfer.tar.gz";
 
 # @remote_path is list of bin directories on remote
 
-my @remote_path = ( '~/src/bowtie2-2.2.5' );  
+#my @remote_path = ( '~/src/bowtie2-2.2.5' );  
+my @remote_path = ( './src/bowtie2-2.2.5' );   #put in handling for ~ here
 
 #   @export is a list of from/to pairs.
 #     "from" is either a single file or directory or a glob
@@ -45,23 +54,63 @@ my @export = (
                [ '~/Proj/Brassica_napus/Transcripts/bn_trans*bt2',  '~/db' ] 
              );
 
-prep_exports( @export ) unless ( $opt_E );
+#
+# the command template is the full executable with all arguments, and
+# $1, $2, ... are replaced by tuple values from the input stream.
+# $$n means argument $n is a file and will need to be transfered to
+# the remote host.
+#
+# this needs to be read in somehow!!!!
+#
 
+my $command_template = 'bowtie2 -k $3 -p 8 -x db/bn_trans -1 $$1 -2 $$2 -S k6test.sam';
+
+#  These are filled by process_template()
+my %arg_is_file;   # indicates which substitution args are files  ($$n)
+my $max_arg = 0;   # maximum arg substituion number in template
+my $expanded_template;  # version with replaced values
+
+
+                                 ################
+                                 # Main Program #
+                                 ################
+
+
+prep_exports( @export ) unless ( $opt_E );  # make the prep file tarball
+
+process_template();   # figure out the argument and file situation
+
+write_remote_driver();   # make one driver file
 
 open( SUBMIT, ">$submit_file" ) || die "Can't write to $submit_file: $!\n";
 
-write_submit_preamble();
+write_submit_preamble();     # get started on the submit file
 
-write_remote_driver();
+my $process_number = 0;
 
+while ( <> )                 # for each input tuple
+   {
+    chomp;
+    s/^\s+//;
+    s/\s+$//;
+    my @args = split( /\s+/ );
+    # now we put remote drivers in each sub
+    my $dir = "$subdir_pref$process_number";
 
-#IMPORT:
+    mkdir( $dir ) || die "Can't mkdir $dir: $!\n";
+    chdir( $dir );
 
+    write_user_args_file( @args );
 
-#PROC:
+    link_arg_files( @args );
 
-#foreach k ( 1 6 )
-#    bowtie2 -k $k -p 8 -x bn_trans -1 ../RNAseq/580-1/902298_ACAGTG_L002_R1_001.fastq -2 ../RNAseq/580-1/902298_ACAGTG_L002_R2_001.fastq -S k6test.sam > k6.log 
+    chdir( ".." );
+
+    $process_number++;
+   }
+
+write_submit_postamble();
+
 
 close( SUBMIT );
 
@@ -79,6 +128,30 @@ print basename( $0 ), " ends.\n";
                                 # Subroutines #
                                 ###############
 
+# this examines all the $n and $$n substitution args in the template $command_template 
+# and determines the maximum arg number, returning that in the global $max_arg, and
+# marking any $$n file args in the global hash %arg_is_file
+
+
+sub  process_template
+   {
+    print "process_template [$command_template]\n";
+    my @subst_matches = $command_template =~ /(\$\$?\d+)/g;
+    print "subst_matches ", join( ",", @subst_matches ), "\n";
+    foreach my $m ( @subst_matches )
+       {
+        $m =~ /\$(\$?)(\d+)/;
+        my ( $fflag, $n ) = ( $1, $2 );
+        $max_arg = $n if ( $n > $max_arg );
+        $arg_is_file{$n} = 1 if ( $fflag ne '' );
+       }
+    print "max_arg is $max_arg\n";
+    print "files are ", join( ",", sort { $a <=> $b } keys( %arg_is_file ) ), "\n";
+    $expanded_template = $command_template;
+    $expanded_template =~ s/\$\$(\d+)/infile_\1/g;
+    $expanded_template =~ s/\$(\d+)/\$user_arg_\1/g;
+    print "expanded_template [$expanded_template]\n";
+   }
 #
 # Write the common preamble part of the Condor submit file
 #
@@ -92,14 +165,20 @@ sub  write_submit_preamble
     print SUBMIT "output     = $condor_output_file\n";
     print SUBMIT "error      = $condor_error_file\n";
     print SUBMIT "\n";
-
-    my $input_file_list = $prep_tarball;  # this will need to have dynamic content
+    print SUBMIT "initial_dir = $subdir_pref\$(Process)\n";
+    my $input_file_list = "../$prep_tarball,$user_args_file";
+    my @infiles = map("infile_$_", (sort {$a <=> $b} keys( %arg_is_file )) );
+    $input_file_list .= "," . join( ",", @infiles ) if ( @infiles );
 
     print SUBMIT "transfer_input_files  = $input_file_list\n";
     print SUBMIT "should_transfer_files = Yes\n";
     print SUBMIT "when_to_transfer_output = ON_EXIT\n";
     print SUBMIT "\n";
-    print SUBMIT "queue 1\n";
+   }
+
+sub  write_submit_postamble
+   {
+    print SUBMIT "queue $process_number\n";
     print SUBMIT "\n";
    }
 
@@ -116,20 +195,64 @@ sub  write_remote_driver
     print RDRIVER "#!/bin/csh\n";
     print RDRIVER "# remote_driver_file created by $0 ", `data`, "\n"; 
     print RDRIVER "# \n";
+    print RDRIVER "set path=( @remote_path \$path )\n";
+    print RDRIVER "rehash\n";
     print RDRIVER "\n";
     print RDRIVER "# unpack environment:\n";
     print RDRIVER "\n";
     print RDRIVER "tar zxvf $prep_tarball\n";
     print RDRIVER "\n";
+    print RDRIVER "# load non-file user arguments\n";
+    print RDRIVER "\n";
+    print RDRIVER "source $user_args_file\n";
+    print RDRIVER "\n";
     print RDRIVER "# execute user command\n";
     print RDRIVER "\n";
-    print RDRIVER "ls -lR\n";
+    print RDRIVER "$expanded_template\n";
+    print RDRIVER "\n";
     print RDRIVER "echo bye from remote\n";
     print RDRIVER "\n";
 
     close( RDRIVER );
 
     system( "chmod a+rx $remote_driver_file" );
+   }
+
+# write non file args into b1.user_args.env
+# this is needed for the driver script to obtain the non-file
+# argument values
+#   user_arg1 = ...
+#   user_arg5 = ...
+#  Note: this actually includes the files too, although they are
+#  not used, but might be useful for documentation
+# 
+sub  write_user_args_file
+   {
+    open( USERARGS, ">$user_args_file" ) 
+           || die "Can't write $user_args_file: $!\n";
+    my $n = 1;
+    foreach my $val ( @_ )
+       {
+        print USERARGS "set user_arg_$n=$val";
+        print USERARGS "    #  infile_$n"   if ( $arg_is_file{$n} );
+        print USERARGS "\n";
+        $n++;
+       }
+    close( USERARGS );
+   }
+
+
+sub  link_arg_files
+   {
+    foreach my $i ( 0..$#_ )
+       {
+        my $n = $i + 1;
+        if ( $arg_is_file{$n} )
+           {
+            print "link infile_$n to $_[$i]\n";
+            symlink( $_[$i], "infile_$n" );
+           }
+       }
    }
 
 #
