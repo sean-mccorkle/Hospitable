@@ -3,6 +3,12 @@
 # adapting b1 for pbs on a shared filesystem
 #
 
+# TODO 
+#  1) -c option for command template
+#  2) possible option for qsub job file template?
+#  3) options for path? 
+#  4) number of processors?  (qsub can use that also command line args)
+
 use strict;
 
 use File::Basename;
@@ -14,24 +20,19 @@ use Cwd;
 # the command template is the full executable with all arguments, and
 # $1, $2, ... are replaced by tuple values from the input stream.
 # $$n means argument $n is a file and will need to be transfered to
-# the remote host.
+# the remote host.  (vestigal from condor version)
+# $# is replaced by current tuple number (process number)
 #
 # this needs to be read in somehow!!!!
 #
 
-my $command_template = 'bowtie2 -k $3 -p 8 -x db/bn_trans -1 $$1 -2 $$2 -S k6test.sam';
-
-#  These are filled by process_template()
-my %arg_is_file;   # indicates which substitution args are files  ($$n)
-my $max_arg = 0;   # maximum arg substituion number in template
-
+my $command_template = 'bowtie2 -k $3 -p 8 -x ../Transcripts/bn_trans -1 $$1 -2 $$2 -S k$3test.$#.sam';
 
                                  ################
                                  # Main Program #
                                  ################
 
 
-process_template();   # figure out the argument and file situation
 
 my $process_number = 0;
 
@@ -42,7 +43,7 @@ while ( <> )                 # for each input tuple
     s/\s+$//;
     my @args = split( /\s+/ );
 
-    my $user_cmd = expand_template( $command_template, @args );
+    my $user_cmd = expand_template( $command_template, $process_number, @args);
     print "$user_cmd\n";
     write_job_file( "pbs_b1.$process_number.qsub", $user_cmd );
 
@@ -57,30 +58,10 @@ print basename( $0 ), " ends.   $process_number processes.\n";
                                 # Subroutines #
                                 ###############
 
-# this examines all the $n and $$n substitution args in the template $command_template 
-# and determines the maximum arg number, returning that in the global $max_arg, and
-# marking any $$n file args in the global hash %arg_is_file
-
-
-sub  process_template
-   {
-    print "process_template [$command_template]\n";
-    my @subst_matches = $command_template =~ /(\$\$?\d+)/g;
-    print "subst_matches ", join( ",", @subst_matches ), "\n";
-    foreach my $m ( @subst_matches )
-       {
-        $m =~ /\$(\$?)(\d+)/;
-        my ( $fflag, $n ) = ( $1, $2 );
-        $max_arg = $n if ( $n > $max_arg );
-        $arg_is_file{$n} = 1 if ( $fflag ne '' );
-       }
-    print "max_arg is $max_arg\n";
-    print "files are ", join( ",", sort { $a <=> $b } keys( %arg_is_file ) ), "\n";
-   }
 
 sub  expand_template
    {
-    my ( $template, @args ) = @_;
+    my ( $template, $procnum, @args ) = @_;
     $template .= " ";   # to handle regexp at end of line
     foreach my $i ( 0..$#args )
        {
@@ -88,6 +69,8 @@ sub  expand_template
         my $val = $args[$i];
         $template =~ s/(\$?\$$j)([^\d])/$val\2/g;
       }
+    $template =~ s/\$\#/$procnum/g;
+
     return( $template );
    }
 
@@ -104,7 +87,7 @@ sub  write_job_file
 #PBS -N $jfile
 #PBS -k oe
 ### Queue name (small, medium, long, verylong)
-#PBS -q hpc_compute
+##PBS -q hpc_compute
 ### Number of nodes (node property ev6 wanted)
 #PBS -l nodes=1,walltime=30:00:00
 ### Declare job non-rerunable
