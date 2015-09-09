@@ -11,5 +11,5 @@ generates a series of scripts for submission with qsub, each of which executes a
 
 This is a developmental test script (perl) to try to get multiple [bowtie2](http://bowtie-bio.sourceforge.net/bowtie2/index.shtml) jobs running as separate processes with a minimum of fuss.  Given tuples of input files, this will make entries into a single Condor submit file, and create numbered subdirectories for back-and-forth transfer.
 
-**`Degt/pbs_b1`**  PBS queuing system version of b1 (bowtie2 test case)
+**`Dev/pbs_b1`**  PBS queuing system version of b1 (bowtie2 test case)
 
