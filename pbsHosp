@@ -12,10 +12,10 @@
 #
 # Usage:
 #
-
+#
 # TODO 
-#  1) -c option for command template
-#  2) possible option for qsub job file template?
+#  1) possible option for qsub job file template?
+#  2) make bash default shell, option for C-shell?
 #  3) options for path? 
 #  4) number of processors?  (qsub can use that also command line args)
 
@@ -36,7 +36,12 @@ use Cwd;
 # this needs to be read in somehow!!!!
 #
 
-my $command_template = 'bowtie2 -k $3 -p 8 -x ../Transcripts/bn_trans -1 $1 -2 $2 -S k$3test.$#.sam';
+
+#my $command_template = 'bowtie2 -k $3 -p 8 -x ../Transcripts/bn_trans -1 $1 -2 $2 -S k$3test.$#.sam';
+
+die "usage: pbsHosp 'unix command' < tuples\n" unless ( @ARGV );
+my $command_template = shift;
+
 
                                  ################
                                  # Main Program #
@@ -55,7 +60,7 @@ while ( <> )                 # for each input tuple
 
     my $user_cmd = expand_template( $command_template, $process_number, @args);
     print "$user_cmd\n";
-    write_job_file( "pbs_b1.$process_number.qsub", $user_cmd );
+    write_job_file( "pbsHosp.$process_number.qsub", $user_cmd );
 
     $process_number++;
    }
@@ -118,6 +123,8 @@ echo Working directory is now `pwd`
 set path = ( ~/src/bowtie2-2.2.5 \$path )
 rehash
 echo path is \$path
+
+# User's command:
 
 $user_command
 
