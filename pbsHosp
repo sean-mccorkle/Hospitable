@@ -3,11 +3,12 @@
 # Programmer:  Sean R. McCorkle
 # Language:    perl
 #
-# Description: given a unix command template with unspecfied numbered 
-#              arguments ($1,$2,...), this will generate a series of PBS 
-#              scripts suitable for parallel execution via qsub.  One script
-#              is generated for each line of tuples given on stdin, the first
-#              whitespace separated value replacing all $1's found in the
+# Description: given a unix command template containing generic numbered 
+#              arguments ($1,$2,...) to be expanded/replaced for each job, 
+#              this will generate a series of PBS scripts suitable for 
+#              parallel execution via qsub.  One script is generated for 
+#              each line of tuples given on stdin, the first whitespace 
+#              separated value replacing all $1's found in the
 #              template, the 2nd replacing all $2's, etc.
 #
 # Usage:
