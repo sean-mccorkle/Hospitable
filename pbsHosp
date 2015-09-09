@@ -1,0 +1,128 @@
+#!/usr/bin/env perl
+# Program:     pbs_Hosp
+# Programmer:  Sean R. McCorkle
+# Language:    perl
+#
+# Description: given a unix command template with unspecfied numbered 
+#              arguments ($1,$2,...), this will generate a series of PBS 
+#              scripts suitable for parallel execution via qsub.  One script
+#              is generated for each line of tuples given on stdin, the first
+#              whitespace separated value replacing all $1's found in the
+#              template, the 2nd replacing all $2's, etc.
+#
+# Usage:
+#
+
+# TODO 
+#  1) -c option for command template
+#  2) possible option for qsub job file template?
+#  3) options for path? 
+#  4) number of processors?  (qsub can use that also command line args)
+
+use strict;
+
+use File::Basename;
+use File::Path;
+use Getopt::Std;
+use Cwd;
+
+#
+# the command template is the full executable with all arguments, and
+# $1, $2, ... are replaced by tuple values from the input stream.
+# $$n means argument $n is a file and will need to be transfered to
+# the remote host.  (vestigal from condor version)
+# $# is replaced by current tuple number (process number)
+#
+# this needs to be read in somehow!!!!
+#
+
+my $command_template = 'bowtie2 -k $3 -p 8 -x ../Transcripts/bn_trans -1 $1 -2 $2 -S k$3test.$#.sam';
+
+                                 ################
+                                 # Main Program #
+                                 ################
+
+
+
+my $process_number = 0;
+
+while ( <> )                 # for each input tuple
+   {
+    chomp;
+    s/^\s+//;
+    s/\s+$//;
+    my @args = split( /\s+/ );
+
+    my $user_cmd = expand_template( $command_template, $process_number, @args);
+    print "$user_cmd\n";
+    write_job_file( "pbs_b1.$process_number.qsub", $user_cmd );
+
+    $process_number++;
+   }
+
+
+print basename( $0 ), " ends.   $process_number processes.\n";
+
+
+                                ###############
+                                # Subroutines #
+                                ###############
+
+
+sub  expand_template
+   {
+    my ( $template, $procnum, @args ) = @_;
+    $template .= " ";   # to handle regexp at end of line
+    foreach my $i ( 0..$#args )
+       {
+        my $j = $i+1;
+        my $val = $args[$i];
+        $template =~ s/(\$?\$$j)([^\d])/$val\2/g;
+      }
+    $template =~ s/\$\#/$procnum/g;
+
+    return( $template );
+   }
+
+
+sub  write_job_file
+   {
+    my ( $jfile, $user_command ) = @_;
+
+    my $cwd = getcwd();
+    open( JOB, ">$jfile" ) || die "can't write to $jfile: $!\n";
+    print JOB <<EndOfJob;
+#!/bin/tcsh
+### Job name
+#PBS -N $jfile
+#PBS -k oe
+### Queue name (small, medium, long, verylong)
+##PBS -q hpc_compute
+### Number of nodes (node property ev6 wanted)
+#PBS -l nodes=1,walltime=30:00:00
+### Declare job non-rerunable
+##PBS -r n
+### Output files
+##PBS -e test.err   not sure why these 
+##PBS -o test.log
+### Mail to user
+##PBS -m ae
+
+# This job's working directory
+echo Initial working directory is \$PBS_O_WORKDIR
+cd $cwd
+
+echo Running on host `hostname`
+echo Time is `date`
+echo Working directory is now `pwd`
+set path = ( ~/src/bowtie2-2.2.5 \$path )
+rehash
+echo path is \$path
+
+$user_command
+
+echo Finished: `date`
+
+EndOfJob
+    close( JOB );
+   }
