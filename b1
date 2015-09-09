@@ -63,7 +63,7 @@ my @export = (
 # this needs to be read in somehow!!!!
 #
 
-my $command_template = 'bowtie2 -k $3 -p 8 -x db/bn_trans -1 $$1 -2 $$2 -S k6test.sam';
+my $command_template = 'bowtie2 -k $3 -p 8 -x db/bn_trans -1 $$1 -2 $$2 -S k$3.sam';
 
 #  These are filled by process_template()
 my %arg_is_file;   # indicates which substitution args are files  ($$n)
@@ -208,7 +208,10 @@ sub  write_remote_driver
     print RDRIVER "\n";
     print RDRIVER "# execute user command\n";
     print RDRIVER "\n";
+    print RDRIVER "echo running $expanded_template ...\n";
     print RDRIVER "$expanded_template\n";
+    print RDRIVER "echo done.  Directory listing:\n";
+    print RDRIVER "ls -l\n";
     print RDRIVER "\n";
     print RDRIVER "echo bye from remote\n";
     print RDRIVER "\n";
