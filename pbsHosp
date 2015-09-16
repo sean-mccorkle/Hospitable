@@ -13,41 +13,56 @@
 #
 # Usage:
 #
+#        pbsHosp  [-p <path>] 'unix command' <tuples
+#
+# Options:
+#
+#       -p <path>  - include <path> string in path 
+#                    (quote multiples,space separated)
+#       -c <dir>   - use <dir> as qsub working directory instead of $cwd
+#
+# Example:
+#
+#      pbsHosp -p ~/src/bowtie2-2.2.5 'bowtie2 -k $3 -p 8 -x ../Transcripts/bn_trans -1 $1 -2 $2 -S k$3test.$#.sam'
+#
+#      generates one file pbsHosp.<n>.qsub for each line of input.  To submit,
+#
+#        foreach f ( pbsHosp.*.qsub )
+#            qsub $f
 #
 # TODO 
-#  1) possible option for qsub job file template?
-#  2) make bash default shell, option for C-shell?
-#  3) options for path? 
-#  4) number of processors?  (qsub can use that also command line args)
+#
+#  1) make bash default shell, option for C-shell?
+#  2) a bunch of potential qsub options:
+#        .  number of processors
+#        .  output/error filenames
+#  3) option to change the qsub jobfile name
+#
 
 use strict;
 
 use File::Basename;
 use File::Path;
+our ( $opt_c, $opt_p );
 use Getopt::Std;
 use Cwd;
 
 #
-# the command template is the full executable with all arguments, and
-# $1, $2, ... are replaced by tuple values from the input stream.
-# $$n means argument $n is a file and will need to be transfered to
-# the remote host.  (vestigal from condor version)
-# $# is replaced by current tuple number (process number)
-#
 # this needs to be read in somehow!!!!
 #
 
+my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] 'unix command' < tuples\n";
 
-#my $command_template = 'bowtie2 -k $3 -p 8 -x ../Transcripts/bn_trans -1 $1 -2 $2 -S k$3test.$#.sam';
+getopts( "c:p:" ) || die $usage;
 
-die "usage: pbsHosp 'unix command' < tuples\n" unless ( @ARGV );
+die $usage unless ( @ARGV );
+
 my $command_template = shift;
 
 
                                  ################
                                  # Main Program #
                                  ################
-
 
 
 my $process_number = 0;
@@ -83,7 +98,8 @@ sub  expand_template
        {
         my $j = $i+1;
         my $val = $args[$i];
-        $template =~ s/(\$?\$$j)([^\d])/$val\2/g;
+        $template =~ s/(\$?\$$j)([^\d])/$val\2/g;  # handle vestigle $$1 etc
+                                                   # from Condor hosp
       }
     $template =~ s/\$\#/$procnum/g;
 
@@ -95,7 +111,7 @@ sub  write_job_file
    {
     my ( $jfile, $user_command ) = @_;
 
-    my $cwd = getcwd();
+    my $wd = $opt_c ? $opt_c : getcwd();
     open( JOB, ">$jfile" ) || die "can't write to $jfile: $!\n";
     print JOB <<EndOfJob;
 #!/bin/tcsh
@@ -116,12 +132,12 @@ sub  write_job_file
 
 # This job's working directory
 echo Initial working directory is \$PBS_O_WORKDIR
-cd $cwd
+cd $wd
 
 echo Running on host `hostname`
 echo Time is `date`
 echo Working directory is now `pwd`
-set path = ( ~/src/bowtie2-2.2.5 \$path )
+set path = ( $opt_p \$path )
 rehash
 echo path is \$path
 
