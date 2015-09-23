@@ -1,0 +1,425 @@
+#!/usr/bin/env perl
+#
+# Options:
+#      -d<file>    - remote drive script name (defaults $prefix_remote_driver)
+#      -e          - only do prep_export, then stop
+#      -E          - skip prep_export step (if done already)
+#      -p <path>   - include <path> string in path 
+#                    (quote multiples,space separated)
+#      -r<req>     - pass <req> string to condor_submit "requirements = <req>"
+#      -s<file>    - condor submit filename (default $prefix.condor)
+#      -t<file>    - prep export filename (default "$prefix.prep_xfer.tar.gz")
+#      -x'exports' - tar and export directories specified in 'exports' string.
+#                    pairs are comma-separated src/dest directory specs.
+#                    src can be a glob pattern.  If dest omitted, defaults to src
+#                    or . if src is a glob.
+#                    multiple pairs are space separated from each other. 
+#
+#  On the head node, in the current working directory, this creates
+#  (but does not run or submit)
+#
+#    1) a tarball of prep files (in the current working directory)
+#    2) a condor submit file
+#    3) a remote driver file, which is the executable on the remote node.
+#        This is a script which unpacks the prep file tarball, and then
+#        executes the 
+#    4) a subdirectory for each tuple of command line argument values
+#        fed to stdin.  This initially contains a file of user argument
+#       values, and symbolic links for any arguments which are files
+#
+# TODO
+#    0) BUG: relpath problems in linking prepped file names:  find and
+#        fix ALL places where this might occur!!!!!!!!!
+#    1) need a prefix option for all the filenames
+#    2) a general directive option (-D or something) to add extra
+#       directives to condor_submit
+#    3) put checks on arg type conflicts in process_template
+#    4) worry about same name collisions in user arg files in the remote
+#       working directory.  (maybe handle somehow, with prefixes?)
+#
+
+use strict;
+
+use File::Basename;
+use File::Path;
+our( $opt_d, $opt_e, $opt_E, $opt_p, $opt_r, $opt_s, $opt_t, $opt_x );  
+use Getopt::Std;
+use File::Basename;
+use Cwd 'abs_path';
+use Data::Dumper;   # for debugging
+
+getopts( "deEp:r:s:t:x:" ) || die "Bad option, only -deEprstx recognized\n";
+
+my $prefix             = "hosp";  # make this an option!!!!
+my $remote_driver_file = $opt_d ? $opt_d : "$prefix\_remote_driver";
+my $submit_file        = $opt_s ? $opt_s : "$prefix.condor";
+my $condor_logfile     = "$prefix.condor.log";
+my $condor_output_file = "$prefix.condor.outfile.txt";
+my $condor_error_file  = "$prefix.condor.error.txt";
+my $subdir_pref        = "$prefix.Subdir";
+my $user_args_file     = "$prefix.user_args.env";
+
+my $prep_tarball       = $opt_t ? $opt_t : "$prefix.prep_xfer.tar.gz";
+
+
+# @remote_path is list of bin directories on the remote (execute) node
+
+#my @remote_path = ( '~/src/bowtie2-2.2.5' );  
+#my @remote_path = ( './src/bowtie2-2.2.5' );    
+my @remote_path = ( ($opt_p ? $opt_p : "./bin" ) );  #put in handling for ~ here
+
+#   @export is a list of from/to pairs.
+#     "from" is either a single file or directory or a glob
+#          ~ stands for home directory on local system
+#     "to" is either a single file or possibly dir, may be empty
+#          ~ stands for the remote system working directory
+#         if not specified, it defaults to "from" if from is a single
+#         file, or ~ from is a glob
+# example:
+# my @export = (
+#                [ '~/src/bowtie2-2.2.5' ],
+#                [ '~/Proj/Brassica_napus/Transcripts/bn_trans*bt2',  '~/db' ] 
+#              );
+
+my @export = ();
+@export = map ( [ split( /,/ ) ], split( /\s+/, $opt_x ) )  if ( $opt_x );
+
+print Dumper( @export );
+
+#
+# the command template is the full executable with all arguments, and
+# $1, $2, ... are replaced by tuple values from the input stream.
+# $$n means argument $n is a file and will need to be transfered to
+# the remote host.
+# @n means the arg value is a comma-separated list of files, all of 
+# which need to be transfered
+#
+
+#my $command_template = 'bowtie2 -k $3 -p 8 -x db/bn_trans -1 $$1 -2 $$2 -S k$3.sam';
+my $command_template = shift;
+
+
+#  These are filled by process_template()
+my %arg_is_file;        # indicates which substitution args are files  ($$n)
+my %arg_is_filelist;    # indicates which substitution args are comma seperated file lists  (@n)
+my $max_arg = 0;        # maximum arg substituion number in template
+my $expanded_template;  # version with replaced values
+
+
+                                 ################
+                                 # Main Program #
+                                 ################
+
+
+prep_exports( @export ) unless ( $opt_E );  # make the prep file tarball
+
+exit if ( $opt_e );
+
+preprocess_template();   # figure out the argument and file situation
+
+write_remote_driver();   # make one driver file
+
+open( SUBMIT, ">$submit_file" ) || die "Can't write to $submit_file: $!\n";
+
+write_submit_preamble();     # get started on the submit file
+
+my $process_number = 0;
+
+while ( <> )                 # for each input tuple
+   {
+    chomp;
+    s/^\s+//;
+    s/\s+$//;
+    my @args = split( /\s+/ );
+    # now we put remote drivers in each sub
+    my $dir = "$subdir_pref$process_number";
+
+    mkdir( $dir ) || die "Can't mkdir $dir: $!\n";
+    chdir( $dir );
+
+    write_user_args_file( @args );
+
+    # link_arg_files( @args );
+
+    chdir( ".." );
+
+    write_submit_queue( $process_number, @args );
+
+    $process_number++;
+   }
+
+write_submit_postamble();
+
+
+close( SUBMIT );
+
+#
+#  Cleanup:
+#
+#  rmdir $tempdir
+#
+
+print basename( $0 ), " ends.\n";
+
+
+                                ###############
+                                # Subroutines #
+                                ###############
+
+# This examines all the $n, $$n, and @n substitution args in the template $command_template 
+# and determines the maximum arg number, returning that in the global $max_arg, and
+# marking any $$n file args in the global hash %arg_is_file, and any @n file lists
+# in the global hash %arg_is_filelist
+#
+# Lastly, this creates a version of the template, in global $expanded_templte, with
+# the $n, $$n and @n forms replaced with $user_arg_n.  This will be incorprated directly
+# in the remote driver script, and the $user_arg_n variables will be shell-substituted
+# from the user_args_file at execution time on the remote node.
+
+sub  preprocess_template
+   {
+    print "process_template [$command_template]\n";
+    my @subst_matches = $command_template =~ /(((\$\$?)|\@)\d+)/g;
+    my $k = int( $#subst_matches/3 );
+    my @j = map( 3*$_, 0..$k );
+    print "new substitution matches [", join( ",", @subst_matches[ @j ] ), "]\n";
+    #
+    # TODO - put checks on arg type conflicts here!!!
+    #
+    foreach my $m ( @subst_matches[ @j ] )
+       {
+        $m =~ /((\$\$?)|\@)(\d+)/;
+        my ( $atype, $n ) = ( $1, $3 );
+        print "    process_template atype [$atype] n [$n]\n";
+        $max_arg = $n if ( $n > $max_arg );
+        $arg_is_file{$n} = 1 if ( $atype eq '$$' );
+        $arg_is_filelist{$n} = 1 if ( $atype eq '@' );
+       }
+    print "max_arg is $max_arg\n";
+    print "files are ", join( ",", sort { $a <=> $b } keys( %arg_is_file ) ), "\n";
+    print "filelists are ", join( ",", sort { $a <=> $b } keys( %arg_is_filelist ) ), "\n";
+    $expanded_template = $command_template;
+    $expanded_template =~ s/((\$\$?)|\@)(\d+)/\$user_arg_\3/g;
+    print "expanded_template [$expanded_template]\n";
+   }
+
+#
+# Write the common preamble part of the Condor submit file
+#
+sub  write_submit_preamble
+   {
+    print SUBMIT "# submit file created by $0 ", `date`, "\n";
+    print SUBMIT "#\n";
+    print SUBMIT "executable = $remote_driver_file\n";
+    print SUBMIT "\n";
+    print SUBMIT "log        = $condor_logfile\n";
+    print SUBMIT "output     = $condor_output_file\n";
+    print SUBMIT "error      = $condor_error_file\n";
+    print SUBMIT "\n";
+
+    print SUBMIT "requirements = $opt_r\n\n" if ( $opt_r );  # optional user requirements
+
+    print SUBMIT "should_transfer_files = Yes\n";
+    print SUBMIT "when_to_transfer_output = ON_EXIT\n";
+    print SUBMIT "\n";
+   }
+
+# this is invoked for each set of tuples
+
+#  TODO - add processing for file lists here!!!
+
+sub  write_submit_queue
+   {
+    my ( $process_number, @args ) = @_;
+    # input files lists now individually list for each process
+    print SUBMIT "initial_dir = $subdir_pref$process_number\n";
+ 
+    my $input_file_list = "../$prep_tarball,$user_args_file";
+    my @infiles = ();
+    my $n = 1;
+    foreach my $arg ( @args )
+       {
+        if ( $arg_is_file{$n} || $arg_is_filelist{$n} )
+           { push( @infiles, map( abs_path( $_ ), split( /,/, $arg ) ) ) }
+        $n++;
+       }
+    $input_file_list .= "," . join( ",", @infiles ) if ( @infiles );
+    
+    print SUBMIT "transfer_input_files  = $input_file_list\n";
+    print SUBMIT "queue 1\n";
+   }   
+
+sub  write_submit_postamble
+   {
+    #print SUBMIT "queue $process_number\n";  # each process now individually queued
+    print SUBMIT "\n";
+   }
+
+#
+# Create the remote driver, the script that will be run on the remote
+# (execute) node, which will unpack the environment tarball and run the
+# actual executable program
+#
+
+sub  write_remote_driver
+   {
+    open( RDRIVER, ">$remote_driver_file" ) || die "Can't write to $remote_driver_file: $!\n";
+
+    print RDRIVER "#!/bin/csh\n";
+    print RDRIVER "# remote_driver_file created by $0 ", `data`, "\n"; 
+    print RDRIVER "# \n";
+    print RDRIVER "set path=( @remote_path \$path )\n";
+    print RDRIVER "rehash\n";
+    print RDRIVER "\n";
+    print RDRIVER "# unpack environment:\n";
+    print RDRIVER "\n";
+    print RDRIVER "tar zxvf $prep_tarball\n";
+    print RDRIVER "\n";
+    print RDRIVER "# load non-file user arguments\n";
+    print RDRIVER "\n";
+    print RDRIVER "source $user_args_file\n";
+    print RDRIVER "\n";
+    print RDRIVER "# execute user command\n";
+    print RDRIVER "\n";
+    print RDRIVER "echo running $expanded_template ...\n";
+    print RDRIVER "$expanded_template\n";
+    print RDRIVER "echo done.  Directory listing:\n";
+    print RDRIVER "ls -l\n";
+    print RDRIVER "\n";
+    print RDRIVER "echo bye from remote\n";
+    print RDRIVER "\n";
+
+    close( RDRIVER );
+
+    system( "chmod a+rx $remote_driver_file" );
+   }
+
+# write non file args into $prefix.user_args.env
+# this is needed for the driver script to obtain the non-file
+# argument values
+#   user_arg1 = ...
+#   user_arg5 = ...
+#  Note: this actually includes the files too, although they are
+#  not used, but might be useful for documentation
+# 
+sub  write_user_args_file
+   {
+    open( USERARGS, ">$user_args_file" ) 
+           || die "Can't write $user_args_file: $!\n";
+    my $n = 1;
+    my $pval;
+    foreach my $val ( @_ )
+       {
+        # if arg is file, we want basename only, strip off leading path
+        if ( $arg_is_file{$n} || $arg_is_filelist{$n} )
+           { $pval = join( ",", map( basename( $_ ), split( /,/, $val ) ) ); }
+        else
+           { $pval = $val; }
+        print USERARGS "set user_arg_$n=$pval\n";
+        $n++;
+       }
+    close( USERARGS );
+   }
+
+#
+# TODO: add processing for file lists here!!!!!
+
+sub  link_arg_files
+   {
+    foreach my $i ( 0..$#_ )
+       {
+        my $n = $i + 1;
+        if ( $arg_is_file{$n} )
+           {
+            print "link infile_$n to $_[$i]\n";
+            symlink( $_[$i], "infile_$n" );
+           }
+       }
+   }
+
+#
+# make a temporary subdirectory and go through the list of export pairs,
+# making symbolic links and a directory structure that will be recreated on the 
+# remote (execute) node
+#
+sub  prep_exports
+   {
+    my $tempdir = "tmp$prefix"."dir$$";
+
+    mkdir( $tempdir ) || die "Can't mkdir $tempdir: $!\n";
+    foreach my $p ( @_ )
+       {
+        prep_link( $tempdir, @{$p} );
+       }
+
+    # make the tarball for transfer.   'h' option follows the symlinks
+
+    chdir( $tempdir );
+    system( "tar hzcvf ../$prep_tarball ." );
+    chdir( ".." );
+   }
+
+
+#
+# handle the linking for one export pair.  A bit complicated because
+# this handles globbing of multiple files and interprets ~ differently
+# for the source and the target.
+#
+sub  prep_link
+   {
+    my $tempdir = shift;
+    my $from = shift;
+    my $to = shift;
+    print "\n";
+    print "prep_link '$from' to '$to'\n";
+    my @from = prep_glob( $from );
+    print "expanded from @from\n";
+    unless ( $to )
+       {
+        if ( @from == 1 )
+           { $to = $from[0]; }
+        else
+           { $to = '~'; }
+       }
+    # in the "to" directory, replace ~  or home with temp
+    $to =~ s/^$ENV{'HOME'}/$tempdir/;
+    $to =~ s/^~/$tempdir/;
+    print "expanded to $to\n";
+    my $to_path = dirname( $to );
+    print "to_path is $to_path\n";   
+    print "\n";
+
+    # check that path exists, if not make it
+
+    mkpath( $to_path ) unless ( -d $to_path );
+
+    # create the symlink in the temporary directory.  Handle single
+    # and multiple sources separately.
+
+    if ( @from == 1 )
+       {
+        my $bf = basename( $from[0] );
+        symlink( $from[0], $to_path . "/" . $bf );
+       }
+    else
+       {
+        mkpath( $to ) unless ( -d $to );
+        foreach my $f ( @from )
+           { symlink( $f, "$to/" . basename($f) ); }
+       }
+   }
+
+
+#
+# this changes any leading ~ to the fully specified users home directory path,
+# then performs a glob operation, returning a list of filenames
+#
+sub  prep_glob
+   {
+    my $s = shift;
+    $s =~ s/^~/$ENV{'HOME'}/;
+    print "prep_glob [$s]\n";
+    return( glob( $s ) );
+   }
+
+
