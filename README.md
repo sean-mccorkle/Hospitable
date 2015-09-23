@@ -3,6 +3,10 @@ Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience 
 
 ###Scripts
 
+**`hosp`** Hospitable condor interface for parallel execution of unix commands.
+
+
+
 **`pbsHosp`**  PBS version of `Hosp`
 
 generates a series of scripts for submission with qsub, each of which executes a copy of the unix command template for each line of input tuples on stdin, with template args ($1,$2,...) substituted with the corresponding tuple values.
