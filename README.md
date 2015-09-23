@@ -26,7 +26,7 @@ Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience 
     
         tophat db/gen  file_d_f,file_e_f           file_d_r,file_e_r
     
-   ensuring that the specified environment and all files needed for the execution are pre-prepared for the execution. `hosp` will create, in the current directory, a condor submit file `hosp.condor` for two processes, an executable driver script  `hosp_remote_driver`, and two subdirectories for collecting the output from each process, `hosp.Subdir[01]`.
+   ensuring that the specified environment and all files needed for the execution are pre-prepared for the execution. On the head node, `hosp` will create, in the current directory, a condor submit file `hosp.condor` for two processes, an executable driver script  `hosp_remote_driver`, and two subdirectories for collecting the output from each process, `hosp.Subdir[01]`.
 
    The job will be immediately ready for submission to condor with this command:
     
@@ -39,7 +39,10 @@ Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience 
               -p'./src/tophat-v2.1.0 ./src/bowtie-2.1.0' \
               'tophat db/gen  @1  @2' <tuples
 
-
+   The -x string will cause ~/src/tophat-v2.1.0 and ~src/bowtie-2.1.0 to be transferred to the execute node before the specfied command is run, as well as files matching the glob ../mydatabase/gen*.bt1 which will be placed in a subdirectory ~/db created on the remote node.  This transfer is effected by creating a tarball on the host machine that will be transferred over by condor and untarred by the remote driver script.
+   
+   The -p option adds the remote directories ~/src/tophat-v2.1.0 and ~/src/bowtie-2.1.0 to the execution path.
+   
 2. **`pbsHosp`**  PBS version of `Hosp`
 
     generates a series of scripts for submission with qsub, each of which executes a copy of the unix command template for each line of input tuples on stdin, with template args ($1,$2,...) substituted with the corresponding tuple values.
