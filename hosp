@@ -1,6 +1,7 @@
 #!/usr/bin/env perl
 #
 # Options:
+#      -C<n>       - request <n> cpus per process
 #      -d<file>    - remote drive script name (defaults $prefix_remote_driver)
 #      -e          - only do prep_export, then stop
 #      -E          - skip prep_export step (if done already)
@@ -25,7 +26,7 @@
 #        executes the 
 #    4) a subdirectory for each tuple of command line argument values
 #        fed to stdin.  This initially contains a file of user argument
-#       values, and symbolic links for any arguments which are files
+#        values
 #
 # TODO
 #    0) BUG: relpath problems in linking prepped file names:  find and
@@ -42,13 +43,13 @@ use strict;
 
 use File::Basename;
 use File::Path;
-our( $opt_d, $opt_e, $opt_E, $opt_p, $opt_r, $opt_s, $opt_t, $opt_x );  
+our( $opt_C, $opt_d, $opt_e, $opt_E, $opt_p, $opt_r, $opt_s, $opt_t, $opt_x );  
 use Getopt::Std;
 use File::Basename;
 use Cwd 'abs_path';
 use Data::Dumper;   # for debugging
 
-getopts( "deEp:r:s:t:x:" ) || die "Bad option, only -deEprstx recognized\n";
+getopts( "C:deEp:r:s:t:x:" ) || die "Bad option, only -deEprstx recognized\n";
 
 my $prefix             = "hosp";  # make this an option!!!!
 my $remote_driver_file = $opt_d ? $opt_d : "$prefix\_remote_driver";
@@ -217,6 +218,7 @@ sub  write_submit_preamble
     print SUBMIT "error      = $condor_error_file\n";
     print SUBMIT "\n";
 
+    print SUBMIT "request_cpus = $opt_C\n\n" if ( $opt_C );  # request cpus
     print SUBMIT "requirements = $opt_r\n\n" if ( $opt_r );  # optional user requirements
 
     print SUBMIT "should_transfer_files = Yes\n";
