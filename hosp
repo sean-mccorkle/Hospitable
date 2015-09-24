@@ -29,8 +29,6 @@
 #        values
 #
 # TODO
-#    0) BUG: relpath problems in linking prepped file names:  find and
-#        fix ALL places where this might occur!!!!!!!!!
 #    1) need a prefix option for all the filenames
 #    2) a general directive option (-D or something) to add extra
 #       directives to condor_submit
@@ -401,13 +399,13 @@ sub  prep_link
     if ( @from == 1 )
        {
         my $bf = basename( $from[0] );
-        symlink( $from[0], $to_path . "/" . $bf );
+        symlink( abs_path( $from[0] ), $to_path . "/" . $bf );
        }
     else
        {
         mkpath( $to ) unless ( -d $to );
         foreach my $f ( @from )
-           { symlink( $f, "$to/" . basename($f) ); }
+           { symlink( abs_path( $f ), "$to/" . basename($f) ); }
        }
    }
 
