@@ -294,13 +294,17 @@ sub  write_remote_driver
     system( "chmod a+rx $remote_driver_file" );
    }
 
-# write non file args into $prefix.user_args.env
-# this is needed for the driver script to obtain the non-file
-# argument values
-#   user_arg1 = ...
-#   user_arg5 = ...
-#  Note: this actually includes the files too, although they are
-#  not used, but might be useful for documentation
+# write tuple values, as shell variables, into a $prefix.user_args 
+# shell script file in each process subdirectory.   This file will be 
+# sourced by the driver script on the execute node and is ultimately
+# how the tuple values are communicated to the unix program to be 
+# executed (by shell variable substitition.)
+#
+# The first tuple element will be assigned to variable "user_arg_1", 
+# the second to "user_arg_2", etc.  For those tuples which are files,
+# the leading paths need to be removed, because the files end up in 
+# the execute node working directory, regardless of where they originated 
+# on the host.
 # 
 sub  write_user_args_file
    {
@@ -321,7 +325,7 @@ sub  write_user_args_file
     close( USERARGS );
    }
 
-#
+#  link_arg_files:  THIS IS VESTIGAL AND SHOULD BE REMOVED
 # TODO: add processing for file lists here!!!!!
 
 sub  link_arg_files
