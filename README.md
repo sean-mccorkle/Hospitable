@@ -7,7 +7,7 @@ Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience 
 
 1. **`hosp`** Hospitable condor interface for parallel execution of unix commands.
 
-   Takes a single argument which is a unix command (*i.e.* a quoted string) where substitution patterns `$n`, `$$n` and `@n` are replaced by values from tuples read from stdin.  Each line of the input tuples creates one parallel condor process execution of the unix command, where `$1` is replaced by the first tuple, `$2` by the 2nd, etc.  Using `$$n` instead of `$n` informs hosp that the value is a file and the file must be transfered to the remote execute node. Using `@n` indicates the tuple is a comma-separated list of files, all of which are to be transfered.
+   Takes a single command-line argument which is itself a unix command (*i.e.* a quoted string) where substitution patterns `$n`, `$$n` and `@n` are to be replaced by values from whitespace-separated tuples read from stdin.  Each line of the input tuples creates one parallel condor process execution of the unix command, where `$1` is replaced by the first element of the tuple, `$2` by the 2nd, etc.  Using `$$n` instead of `$n` informs hosp that the element is a file and the file must be transfered to the remote execute node. Using `@n` indicates the tuple element is a comma-separated list of files, all of which are to be transfered.
 
 
         hosp  'tophat db/gen  @1  @2' <tuples
