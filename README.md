@@ -26,7 +26,7 @@ Trying to give [Condor](https://research.cs.wisc.edu/htcondor/) the convenience 
     
         tophat db/gen  file_d_f,file_e_f           file_d_r,file_e_r
     
-   ensuring that the specified environment and all files needed for the execution are pre-prepared for the execution. On the head node, `hosp` will create, in the current directory, a condor submit file `hosp.condor` for two processes, an executable driver script  `hosp_remote_driver`, and two subdirectories for collecting the output from each process, `hosp.Subdir[01]`.
+   ensuring that the specified environment and all files needed for the execution are pre-prepared for the execution. On the head node, `hosp` will create, in the current directory, one condor submit file `hosp.condor` for two processes, one executable driver script  `hosp_remote_driver`, and two subdirectories for collecting the output from each process, `hosp.Subdir[01]`.
 
    The job will be immediately ready for submission to condor with this command:
     
