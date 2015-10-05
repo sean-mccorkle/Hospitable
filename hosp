@@ -392,6 +392,7 @@ sub  prep_link
     # in the "to" directory, replace ~  or home with temp
     $to =~ s/^$ENV{'HOME'}/$tempdir/;
     $to =~ s/^~/$tempdir/;
+    $to = "$tempdir/$to" if ( $to eq basename( $to ) );   # if no dir prefix, add tempdir
     print "expanded to $to\n";
     my $to_path = dirname( $to );
     print "to_path is $to_path\n";   
@@ -407,13 +408,17 @@ sub  prep_link
     if ( @from == 1 )
        {
         my $bf = basename( $from[0] );
+        print "single symlink ", abs_path( $from[0] ), "  ", $to_path . "/" . $bf, "\n";
         symlink( abs_path( $from[0] ), $to_path . "/" . $bf );
        }
     else
        {
         mkpath( $to ) unless ( -d $to );
         foreach my $f ( @from )
-           { symlink( abs_path( $f ), "$to/" . basename($f) ); }
+           {
+            print "mult symlink ", abs_path( $f ), "  ", "$to/" . basename($f), "\n"; 
+            symlink( abs_path( $f ), "$to/" . basename($f) ); 
+           }
        }
    }
 
