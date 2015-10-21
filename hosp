@@ -392,7 +392,7 @@ sub  prep_link
     # in the "to" directory, replace ~  or home with temp
     $to =~ s/^$ENV{'HOME'}/$tempdir/;
     $to =~ s/^~/$tempdir/;
-    $to = "$tempdir/$to" if ( $to eq basename( $to ) );   # if no dir prefix, add tempdir
+    $to = "$tempdir/$to" if ( $to ne $tempdir && $to eq basename( $to ) );   # if no dir prefix, add tempdir
     print "expanded to $to\n";
     my $to_path = dirname( $to );
     print "to_path is $to_path\n";   
