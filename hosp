@@ -50,7 +50,7 @@ use File::Basename;
 use Cwd 'abs_path';
 use Data::Dumper;   # for debugging
 
-getopts( "C:deEo:p:r:s:t:x:" ) || die "Bad option, only -deEprstx recognized\n";
+getopts( "C:deEo:p:r:s:t:x:" ) || die "Bad option, only -CdeEoprstx recognized\n";
 
 my $prefix             = "hosp";  # make this an option!!!!
 my $remote_driver_file = $opt_d ? $opt_d : "$prefix\_remote_driver";
