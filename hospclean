@@ -2,4 +2,4 @@
 #
 set pref="hosp"
 
-rm -r $pref.Subdir[0-9]* $pref.condor $pref\_remote_driver 
+rm -r $pref.Subdir[0-9]* $pref.condor $pref\_remote_driver $pref.prep_xfer.tar.gz tmphospdir[0-9]* 
