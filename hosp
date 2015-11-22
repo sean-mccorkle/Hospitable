@@ -10,6 +10,7 @@
 #                    transfered (creates transfer_output_files directive).
 #      -p <path>   - include <path> string in path 
 #                    (quote multiples,space separated)
+#      -P <str>    - use <str> as prefix for generated filenames and directories, default is "hosp"
 #      -r<req>     - pass <req> string to condor_submit "requirements = <req>"
 #      -s<file>    - condor submit filename (default $prefix.condor)
 #      -t<file>    - prep export filename (default "$prefix.prep_xfer.tar.gz")
@@ -59,14 +60,14 @@ use strict;
 
 use File::Basename;
 use File::Path;
-our( $opt_C, $opt_d, $opt_e, $opt_E, $opt_o, $opt_p, $opt_r, $opt_s, $opt_t, $opt_x );  
+our( $opt_C, $opt_d, $opt_e, $opt_E, $opt_o, $opt_p, $opt_P, $opt_r, $opt_s, $opt_t, $opt_x );  
 use Getopt::Std;
 use Cwd 'abs_path';
 use Data::Dumper;   # for debugging
 
-getopts( "C:deEo:p:r:s:t:x:" ) || die "Bad option, only -CdeEoprstx recognized\n";
+getopts( "C:deEo:p:P:r:s:t:x:" ) || die "Bad option, only -CdeEoprstx recognized\n";
 
-my $prefix             = "hosp";  # make this an option!!!!
+my $prefix             = $opt_P ? $opt_P : "hosp"; 
 my $remote_driver_file = $opt_d ? $opt_d : "$prefix\_remote_driver";
 my $submit_file        = $opt_s ? $opt_s : "$prefix.condor";
 my $condor_logfile     = "$prefix.condor.log";

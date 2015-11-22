@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# Program:     pbs_Hosp
+# Program:     pbsHosp
 # Programmer:  Sean R. McCorkle
 # Language:    perl
 #
@@ -19,6 +19,7 @@
 #
 #       -p <path>  - include <path> string in path 
 #                    (quote multiples,space separated)
+#       -P <str>   - use <str> as prefix for generated qsub filenames, default is "pbsHosp"
 #       -c <dir>   - use <dir> as qsub working directory instead of $cwd
 #
 # Example:
@@ -43,7 +44,7 @@ use strict;
 
 use File::Basename;
 use File::Path;
-our ( $opt_c, $opt_p );
+our ( $opt_c, $opt_p, $opt_P );
 use Getopt::Std;
 use Cwd;
 
@@ -53,9 +54,11 @@ use Cwd;
 
 my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] 'unix command' < tuples\n";
 
-getopts( "c:p:" ) || die $usage;
+getopts( "c:p:P:" ) || die $usage;
 
 die $usage unless ( @ARGV );
+
+my $prefix = $opt_P ? $opt_P : "pbsHosp";
 
 my $command_template = shift;
 
@@ -76,7 +79,7 @@ while ( <> )                 # for each input tuple
 
     my $user_cmd = expand_template( $command_template, $process_number, @args);
     print "$user_cmd\n";
-    write_job_file( "pbsHosp.$process_number.qsub", $user_cmd );
+    write_job_file( "$prefix.$process_number.qsub", $user_cmd );
 
     $process_number++;
    }
