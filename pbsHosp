@@ -13,14 +13,15 @@
 #
 # Usage:
 #
-#        pbsHosp  [-p <path>] 'unix command' <tuples
+#        pbsHosp  [-p <path>] [-c<dir>] [-n<num>] [-P<str>] 'unix command' <tuples
 #
 # Options:
 #
+#       -c <dir>   - use <dir> as qsub working directory instead of $cwd
+#       -n <num>   - start process numbering at <num> instead of 0
 #       -p <path>  - include <path> string in path 
 #                    (quote multiples,space separated)
 #       -P <str>   - use <str> as prefix for generated qsub filenames, default is "pbsHosp"
-#       -c <dir>   - use <dir> as qsub working directory instead of $cwd
 #
 # Example:
 #
@@ -44,7 +45,7 @@ use strict;
 
 use File::Basename;
 use File::Path;
-our ( $opt_c, $opt_p, $opt_P );
+our ( $opt_c, $opt_n, $opt_p, $opt_P );
 use Getopt::Std;
 use Cwd;
 
@@ -52,13 +53,15 @@ use Cwd;
 # this needs to be read in somehow!!!!
 #
 
-my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] 'unix command' < tuples\n";
+my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] [-n<num>] [-P<str>] 'unix command' < tuples\n";
 
-getopts( "c:p:P:" ) || die $usage;
+getopts( "c:n:p:P:" ) || die $usage;
 
 die $usage unless ( @ARGV );
 
 my $prefix = $opt_P ? $opt_P : "pbsHosp";
+
+my $first_proc_num = $opt_n ? $opt_n : 0;
 
 my $command_template = shift;
 
@@ -68,7 +71,7 @@ my $command_template = shift;
                                  ################
 
 
-my $process_number = 0;
+my $process_number = $first_proc_num;
 
 while ( <> )                 # for each input tuple
    {
