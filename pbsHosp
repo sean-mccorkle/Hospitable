@@ -92,7 +92,7 @@ while ( <> )                 # for each input tuple
    }
 
 
-print basename( $0 ), " ends.   $process_number processes.\n";
+print basename( $0 ), " ends.   ", $process_number - $first_proc_num, " processes.\n";
 
 
                                 ###############
