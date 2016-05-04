@@ -103,15 +103,20 @@ print basename( $0 ), " ends.   ", $process_number - $first_proc_num, " processe
 sub  expand_template
    {
     my ( $template, $procnum, @args ) = @_;
-    $template .= " ";   # to handle regexp at end of line
+    $template .= " ";              # to handle regexp at end of line
+    $template = " " . $template;   # to handle regexp (\) condition at beginning
     foreach my $i ( 0..$#args )
        {
         my $j = $i+1;
         my $val = $args[$i];
-        $template =~ s/(\$?\$$j)([^\d])/$val\2/g;  # handle vestigle $$1 etc
+        $template =~ s/([^\\])(\$?\$$j)([^\d])/\1$val\3/g;  # handle vestigle $$1 etc
                                                    # from Condor hosp
       }
-    $template =~ s/\$\#/$procnum/g;
+    $template =~ s/([^\\])\$\#/\1$procnum/g;
+
+    $template =~ s/\\(\$?\$\d+[^\d])/\1/g;         # clear the \ from \$N escapes
+
+    $template =~ s/^ //;                           # remove added blank from beginning
 
     return( $template );
    }
