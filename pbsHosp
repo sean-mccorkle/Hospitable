@@ -3,7 +3,7 @@
 # Programmer:  Sean R. McCorkle
 # Language:    perl
 #
-# Description: given a unix command template containing generic numbered 
+# Description: Given a unix command template containing generic numbered 
 #              arguments ($1,$2,...) to be expanded/replaced for each job, 
 #              this will generate a series of PBS scripts suitable for 
 #              parallel execution via qsub.  One script is generated for 
@@ -11,9 +11,15 @@
 #              separated value replacing all $1's found in the
 #              template, the 2nd replacing all $2's, etc.
 #
-#              In the template script, $# will be replaced by the process
+#              In the template script (unix command), $# will be replaced by the process
 #              (or input line) number.  First process is 0 unless overridden 
 #              by -n.
+#
+#              A backslash (\) escape can be used to surpress template substitution,
+#              so that strings like $1 can be passed through to the actual unix command
+#              (useful for things like awk scripts). Where occurrences of $1 are replaced
+#              by the first in each input tuple, \$1 becomes $1 in the executed command.
+#              
 #
 # Usage:
 #
