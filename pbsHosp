@@ -29,6 +29,11 @@
 #
 #       -c <dir>   - use <dir> as qsub working directory instead of $cwd
 #       -n <num>   - start process numbering at <num> instead of 0
+#       -N <num>   - ignore stdin tuples if any, instead generate <num> jobs.
+#                    Any tuple vars in the template will ($1,$2,..) not be expanded,
+#                    but $# will be valid. (this is a useful convenience for when all 
+#                    filenames etc are completely determined by the process or job 
+#                    number $#)
 #       -p <path>  - include <path> string in path 
 #                    (quote multiples,space separated)
 #       -P <str>   - use <str> as prefix for generated qsub filenames, default is "pbsHosp"
@@ -55,7 +60,7 @@ use strict;
 
 use File::Basename;
 use File::Path;
-our ( $opt_c, $opt_n, $opt_p, $opt_P );
+our ( $opt_c, $opt_n, $opt_N, $opt_p, $opt_P );
 use Getopt::Std;
 use Cwd;
 
@@ -63,9 +68,9 @@ use Cwd;
 # this needs to be read in somehow!!!!
 #
 
-my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] [-n<num>] [-P<str>] 'unix command' < tuples\n";
+my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] [-n<num>] [-N<num>] [-P<str>] 'unix command' < tuples\n";
 
-getopts( "c:n:p:P:" ) || die $usage;
+getopts( "c:n:N:p:P:" ) || die $usage;
 
 die $usage unless ( @ARGV );
 
@@ -83,18 +88,32 @@ my $command_template = shift;
 
 my $process_number = $first_proc_num;
 
-while ( <> )                 # for each input tuple
+if ( $opt_N )                    # ignore input tuples, instead just count
    {
-    chomp;
-    s/^\s+//;
-    s/\s+$//;
-    my @args = split( /\s+/ );
+    for ( my $i = 0; $i < $opt_N; $i++ )
+       {
+        my $user_cmd = expand_template( $command_template, $process_number, () );
+        print "$user_cmd\n";
+        write_job_file( "$prefix.$process_number.qsub", $user_cmd );
 
-    my $user_cmd = expand_template( $command_template, $process_number, @args);
-    print "$user_cmd\n";
-    write_job_file( "$prefix.$process_number.qsub", $user_cmd );
+        $process_number++;
+       }
+   }
+else                             # read input tuples
+   {
+    while ( <> )                 # for each input tuple
+       {
+        chomp;
+        s/^\s+//;
+        s/\s+$//;
+        my @args = split( /\s+/ );
 
-    $process_number++;
+        my $user_cmd = expand_template( $command_template, $process_number, @args);
+        print "$user_cmd\n";
+        write_job_file( "$prefix.$process_number.qsub", $user_cmd );
+
+        $process_number++;
+       }
    }
 
 
@@ -111,12 +130,12 @@ sub  expand_template
     my ( $template, $procnum, @args ) = @_;
     $template .= " ";              # to handle regexp at end of line
     $template = " " . $template;   # to handle regexp (\) condition at beginning
-    foreach my $i ( 0..$#args )
+    for ( my $i = 0; $i <= $#args; $i++ )
        {
         my $j = $i+1;
         my $val = $args[$i];
-        $template =~ s/([^\\])(\$?\$$j)([^\d])/\1$val\3/g;  # handle vestigle $$1 etc
-                                                   # from Condor hosp
+        $template =~ s/([^\\])(\$?\$$j)([^\d])/\1$val\3/g;  # handle vestigal $$1 etc
+                                                            # from Condor hosp
       }
     $template =~ s/([^\\])\$\#/\1$procnum/g;
 
