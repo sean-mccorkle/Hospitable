@@ -23,11 +23,12 @@
 #
 # Usage:
 #
-#        pbsHosp  [-p <path>] [-c<dir>] [-n<num>] [-P<str>] 'unix command' <tuples
+#        pbsHosp  [-p <path>] [-c<dir>] [-C <num>] [-n<num>] [-P<str>] 'unix command' <tuples
 #
 # Options:
 #
 #       -c <dir>   - use <dir> as qsub working directory instead of $cwd
+#       -C <num>   - number of cores (processers per node - ppn=<num>)
 #       -n <num>   - start process numbering at <num> instead of 0
 #       -N <num>   - ignore stdin tuples if any, instead generate <num> jobs.
 #                    Any tuple vars in the template will ($1,$2,..) not be expanded,
@@ -60,7 +61,7 @@ use strict;
 
 use File::Basename;
 use File::Path;
-our ( $opt_c, $opt_n, $opt_N, $opt_p, $opt_P );
+our ( $opt_c, $opt_C, $opt_n, $opt_N, $opt_p, $opt_P );
 use Getopt::Std;
 use Cwd;
 
@@ -68,9 +69,9 @@ use Cwd;
 # this needs to be read in somehow!!!!
 #
 
-my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] [-n<num>] [-N<num>] [-P<str>] 'unix command' < tuples\n";
+my $usage = "usage: pbsHosp [-p <path>] [-c <dir>] [-C <num>] [-n<num>] [-N<num>] [-P<str>] 'unix command' < tuples\n";
 
-getopts( "c:n:N:p:P:" ) || die $usage;
+getopts( "c:C:n:N:p:P:" ) || die $usage;
 
 die $usage unless ( @ARGV );
 
@@ -152,6 +153,7 @@ sub  write_job_file
     my ( $jfile, $user_command ) = @_;
 
     my $wd = $opt_c ? $opt_c : getcwd();
+    my $ppn = $opt_C ? ":ppn=$opt_C" : "";
     open( JOB, ">$jfile" ) || die "can't write to $jfile: $!\n";
     print JOB <<EndOfJob;
 #!/bin/tcsh
@@ -161,7 +163,7 @@ sub  write_job_file
 ### Queue name (small, medium, long, verylong)
 ##PBS -q hpc_compute
 ### Number of nodes (node property ev6 wanted)
-#PBS -l nodes=1,walltime=30:00:00
+#PBS -l nodes=1$ppn,walltime=30:00:00
 ### Declare job non-rerunable
 ##PBS -r n
 ### Output files
